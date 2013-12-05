@@ -17,10 +17,10 @@ Factors proposal
     multiple author
     page rank
     info boxes
-  *  templates
-    structured data
+  * templates
+  * structured data
     creator
-  *  size of wikis
+  * size of wikia
     wiki's WAM
     wiki has promote
     no. of redirects
@@ -28,7 +28,8 @@ Factors proposal
     comments / talk pages
     link from the main page
     link from hubs
-    likes / +1
+  * likes/facebook shares
+    Google +1
 
 
 Factors working at the moment are marked with * above.
@@ -50,21 +51,18 @@ class Api(object):
     params.update(kwargs)
     r = requests.get(self.api, params=sorted(params.items()))
     if not r.ok:raise Exception(r.text)
-    if not r.json(): raise Exception(r.text)
-    return r.json()
+    json = r.json()
+    if not json: raise Exception(r.text)
+    return json
   
     
-class FbLinks(object):
+class FbLinks(Api):
   def __init__(self, url):
-    self.url = url
+    super(FbLinks, self).__init__("http://api.facebook.com/method/fql.query",
+          query = '''select total_count from link_stat where url="'%s'"''' % url)
     
   def __call__(self):
-    r = requests.get("http://api.facebook.com/method/fql.query", params=
-          {'query': '''select total_count from link_stat where url="'%s'"''' % self.url,
-           'format': 'json'})
-    if not r.ok:raise Exception(r.text)
-    if not r.json(): raise Exception(r.text)
-    return r.json()[0]['total_count']   
+    return super(FbLinks, self).__call__()[0]['total_count']
 
 class Article(object):
   print_json = False
@@ -86,12 +84,9 @@ class Article(object):
     self.page = self.info['query']['pages'].values()[0]
     self.pageid = self.page['pageid']
     self.likes = FbLinks(self.url)()
-    #self.wikiaApi = Api(self.wikiDomain + "/api/v1/Related
-    
-
-
+    self.structured = Api(self.wikiDomain + "/api/v1/Articles/asSimpleJson")(id=self.pageid)
     values = [c(self) for c in self.columns]
-    if self.print_json: values.append(repr(self.info))
+    if self.print_json: values.extend([repr(self.info), repr(self.structured)])
     return values
 
   def column_url(self):
@@ -146,10 +141,19 @@ class Article(object):
     """Facebook links"""
     return self.likes
   
+  def column_section_count(self):
+    """Section count"""
+    def count(d):
+      sections = d.get('sections', ())
+      result = 1 + sum([count(x) for x in sections if isinstance(x, dict)])
+      return result
+    return count(self.statistics)
+     
   columns = [
     column_url, column_title, column_length, column_image_count, column_categories,
     column_outbound, column_templates, column_wikia_articles, column_wikia_edits,
-    column_wikia_activeusers, column_wikia_editsperuser, column_fb_links
+    column_wikia_activeusers, column_wikia_editsperuser, column_fb_links, column_section_count,
+   
   ]
       
 
@@ -160,7 +164,8 @@ def main(args):
   writer = csv.writer(sys.stdout, quoting=csv.QUOTE_NONNUMERIC)  
   writer.writerow(header)
   urls = [line[0] for line in reader]
-  dl = defer.DeferredList([threads.deferToThread(Article(url).fetch) for url in urls])
+  if '--single' in args: urls = urls[:1]
+  dl = defer.DeferredList([threads.deferToThread(Article(url).fetch) for url in urls[:1]])
   @dl.addCallback
   def write(rows):
     successes = [row[1] for row in rows if row[0]]
