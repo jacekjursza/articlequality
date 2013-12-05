@@ -54,17 +54,17 @@ class Api(object):
     return r.json()
   
     
-class FbLikes(object):
+class FbLinks(object):
   def __init__(self, url):
     self.url = url
     
   def __call__(self):
     r = requests.get("http://api.facebook.com/method/fql.query", params=
-          {'query': '''select like_count from link_stat where url="'%s'"''' % self.url,
+          {'query': '''select total_count from link_stat where url="'%s'"''' % self.url,
            'format': 'json'})
     if not r.ok:raise Exception(r.text)
     if not r.json(): raise Exception(r.text)
-    return r.json()[0]['like_count']   
+    return r.json()[0]['total_count']   
 
 class Article(object):
   print_json = False
@@ -85,7 +85,7 @@ class Article(object):
     self.statistics = self.info['query']['statistics']
     self.page = self.info['query']['pages'].values()[0]
     self.pageid = self.page['pageid']
-    self.likes = FbLikes(self.url)()
+    self.likes = FbLinks(self.url)()
     #self.wikiaApi = Api(self.wikiDomain + "/api/v1/Related
     
 
@@ -142,14 +142,14 @@ class Article(object):
     if self.statistics['activeusers']:
       return self.statistics['edits'] / self.statistics['activeusers']
     
-  def column_likes(self):
-    """Facebook likes"""
+  def column_fb_links(self):
+    """Facebook links"""
     return self.likes
   
   columns = [
     column_url, column_title, column_length, column_image_count, column_categories,
     column_outbound, column_templates, column_wikia_articles, column_wikia_edits,
-    column_wikia_activeusers, column_wikia_editsperuser, column_likes
+    column_wikia_activeusers, column_wikia_editsperuser, column_fb_links
   ]
       
 
