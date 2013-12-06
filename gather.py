@@ -12,7 +12,7 @@ Factors proposal
   * has category
     has inbound and outbound links
   * has image
-    has sections
+  * has sections
     page views
     multiple author
     page rank
