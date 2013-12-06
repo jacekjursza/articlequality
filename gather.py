@@ -3,36 +3,43 @@
 """
 Gather data on articles
 
-Factors proposal
+Factors done:
 
   * Size of content
-    Labels: Stub, featured
-    place in articles life cycle
-    Diversity of words words in content
   * has category
-    has inbound and outbound links
   * has image
   * has sections
-    page views
-    multiple author
-    page rank
-    info boxes
   * templates
   * structured data
-    creator
   * size of wikia
-    wiki's WAM
-    wiki has promote
-    no. of redirects
+  * likes/facebook shares
+
+Potential factors:
+
+  Labels: Stub, featured
+    
+  Revision based:    
+    place in articles life cycle
+    multiple author
     number of edits / editors
+    creator
+
+  Content based: 
+    Diversity of words words in content
+    has inbound and outbound links
+    no. of redirects
+    info boxes
     comments / talk pages
+    
+  Popularity:  
+    page views
+    page rank
+    wiki's WAM
     link from the main page
     link from hubs
-  * likes/facebook shares
+    wiki has promote
     Google +1
 
-
-Factors working at the moment are marked with * above.
 """
 
 import os, csv, sys, itertools, operator, codecs, collections, requests
