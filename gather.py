@@ -40,9 +40,14 @@ Potential factors:
     wiki has promote
     Google +1
 
+Input file - CSV format, first row skipped:
+URL in first column
+Article quality (0-100) in last column
+Rest of columns ignored
+
 """
 
-import os, csv, sys, itertools, operator, codecs, collections, requests
+import os, csv, sys, itertools, operator, codecs, collections, requests, json
 from twisted.internet import defer, threads
 from twisted.python import log
 from twisted.web import client
@@ -70,12 +75,16 @@ class FbLinks(Api):
     
   def __call__(self):
     return super(FbLinks, self).__call__()[0]['total_count']
+  
+def prettyPrint(obj):
+  return json.dumps(obj, indent=2)
 
 class Article(object):
   print_json = False
   
-  def __init__(self, url):
+  def __init__(self, url, quality):
     self.url = url
+    self.quality = quality
     (self.wikiDomain, self.titlePath) = self.url.split("/wiki/")
     self.title = self.titlePath.replace("_", " ")
       
@@ -91,11 +100,10 @@ class Article(object):
     self.page = self.info['query']['pages'].values()[0]
     self.pageid = self.page['pageid']
     self.likes = FbLinks(self.url)()
-    self.structured = Api(self.wikiDomain + "/api/v1/Articles/asSimpleJson")(id=self.pageid)
-    values = [c(self) for c in self.columns]
-    if self.print_json: values.extend([repr(self.info), repr(self.structured)])
+    self.structured = Api(self.wikiDomain + "/wikia.php?controller=ArticlesApi&method=getAsSimpleJson")(id=self.pageid)
+    values = [c(self) for c in self.columns()]    
     return values
-
+  
   def column_url(self):
     """URL of article"""
     return self.url
@@ -103,6 +111,10 @@ class Article(object):
   def column_title(self):
     """Wiki name"""
     return self.title
+
+  def column_quality(self):
+    """Quality percentile"""
+    return self.quality    
   
   def column_length(self):
     """Article length"""
@@ -120,11 +132,11 @@ class Article(object):
     return self.count('categories')
   
   def column_outbound(self):
-    """Outbound links"""
+    """Outbound link count"""
     return self.count('links')
 
   def column_templates(self):
-    """Outbound templates"""
+    """Used template count"""
     return self.count('templates')
   
   def column_wikia_articles(self):
@@ -145,34 +157,48 @@ class Article(object):
       return self.statistics['edits'] / self.statistics['activeusers']
     
   def column_fb_links(self):
-    """Facebook links"""
+    """Facebook total shares"""
     return self.likes
   
   def column_section_count(self):
     """Section count"""
-    def count(d):
-      sections = d.get('sections', ())
-      result = 1 + sum([count(x) for x in sections if isinstance(x, dict)])
-      return result
-    return count(self.statistics)
-     
-  columns = [
-    column_url, column_title, column_length, column_image_count, column_categories,
+    sections = self.structured.get('sections', ()) # count top-level only 
+    return len(sections)
+  
+  _columns = [    
+    column_url, column_title, column_quality, column_length, column_image_count, column_categories,
     column_outbound, column_templates, column_wikia_articles, column_wikia_edits,
-    column_wikia_activeusers, column_wikia_editsperuser, column_fb_links, column_section_count,
-   
+    column_wikia_activeusers, column_wikia_editsperuser, column_fb_links, column_section_count,   
   ]
+
+  def json_info(self):
+    """MW API result"""
+    return prettyPrint(self.info)
+
+  def json_structure(self):
+    """asSimpleJson API result"""
+    return prettyPrint(self.structured)
+     
+
+  _json_columns = [
+    json_info, json_structure
+  ]
+  
+  
+  @classmethod
+  def columns(cls):    
+    return cls._columns + cls._json_columns if cls.print_json else cls._columns
       
 
 def main(args):
   if '--json' in args: Article.print_json = True
-  header = [getattr(x, "__doc__", getattr(x, "__name__")) for x in Article.columns]
-  reader = csv.reader(sys.stdin)  
+  header = [getattr(x, "__doc__", getattr(x, "__name__")) for x in Article.columns()]
+  reader = csv.reader(sys.stdin)
   writer = csv.writer(sys.stdout, quoting=csv.QUOTE_NONNUMERIC)  
   writer.writerow(header)
-  urls = [line[0] for line in reader]
-  if '--single' in args: urls = urls[:1]
-  dl = defer.DeferredList([threads.deferToThread(Article(url).fetch) for url in urls[:1]])
+  input = [(line[0], line[-1]) for line in reader][1:] # skip first row (header)
+  if '--single' in args: input = input[:1] # test run on one row
+  dl = defer.DeferredList([threads.deferToThread(Article(*x).fetch) for x in input])
   @dl.addCallback
   def write(rows):
     successes = [row[1] for row in rows if row[0]]
